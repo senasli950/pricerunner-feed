@@ -15,7 +15,7 @@ from difflib import SequenceMatcher
 
 SHOPIFY_STORE = "it3u3i-5e.myshopify.com"
 ACCESS_TOKEN = os.environ["SHOPIFY_ACCESS_TOKEN"]
-API_translations(localeVERSION = "2025-01"
+API_VERSION = "2025-01"
 
 URL = (
     f"https://{SHOPIFY_STORE}"
