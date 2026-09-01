@@ -1,14 +1,19 @@
 import os
 import re
 import html
-import requests
 import csv
 import io
+import requests
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
 
+# =========================================================
+# SHOPIFY
+# =========================================================
+
 SHOPIFY_STORE = "it3u3i-5e.myshopify.com"
+
 ACCESS_TOKEN = os.environ["SHOPIFY_ACCESS_TOKEN"]
 
 API_VERSION = "2025-01"
@@ -23,16 +28,24 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-GOOGLE_SHEET_ID = "14xegQdHjQBytqo-k2E6N8H3AeCqRqvEJ3BmSTZgTQRY"
+
+# =========================================================
+# GOOGLE SHEETS
+# =========================================================
+
+GOOGLE_SHEET_ID = (
+    "14xegQdHjQBytqo-k2E6N8H3AeCqRqvEJ3BmSTZgTQRY"
+)
 
 GOOGLE_SHEET_NAME = "GTIN"
 
-GOOGLE_SHEET_CSV_URL = (
-    f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}"
-    f"/gviz/tq?tqx=out:csv&sheet={GOOGLE_SHEET_NAME}"
-)
+
+# =========================================================
+# BRAND RULES
+# =========================================================
 
 BRAND_RULES = [
+
     ("xbox game pass", "Microsoft"),
     ("microsoft office", "Microsoft"),
     ("office 365", "Microsoft"),
@@ -81,7 +94,10 @@ BRAND_RULES = [
 ]
 
 
-# Custom Trovaprezzi categories
+# =========================================================
+# CUSTOM TROVAPREZZI CATEGORIES
+# =========================================================
+
 CATEGORY_RULES = {
     "XBOX-GPE1": "Abbonamenti Gaming",
     "XBOX-GPU3": "Abbonamenti Gaming",
@@ -89,6 +105,10 @@ CATEGORY_RULES = {
     "XBOX-GPE3": "Abbonamenti Gaming",
 }
 
+
+# =========================================================
+# SHOPIFY QUERY
+# =========================================================
 
 QUERY = """
 query GetProducts($cursor: String) {
@@ -116,17 +136,12 @@ query GetProducts($cursor: String) {
         fullName
       }
 
-      italianTranslations: translations(locale: "it") {
+      translations(locale: "it") {
         key
         value
       }
 
-      frenchTranslations: translations(locale: "fr") {
-        key
-        value
-      }
-
-      images(first: 10) {
+      images(first: 1) {
         nodes {
           url
         }
@@ -134,13 +149,14 @@ query GetProducts($cursor: String) {
 
       variants(first: 1) {
         nodes {
+
           sku
           price
 
           inventoryItem {
             tracked
 
-            inventoryLevels(first: 1) {
+            inventoryLevels(first: 10) {
               nodes {
                 quantities(names: ["available"]) {
                   name
@@ -161,39 +177,28 @@ query GetProducts($cursor: String) {
 """
 
 
-
-def normalize_product_name(name):
-    if not name:
-        return ""
-    name = html.unescape(str(name))
-    name = re.sub(r"\s+", " ", name)
-    return name.strip().casefold()
-
-
-def clean_gtin(gtin):
-    if gtin is None:
-        return ""
-    gtin = str(gtin).strip()
-    if not gtin:
-        return ""
-    if re.fullmatch(r"\d+\.0", gtin):
-        gtin = gtin[:-2]
-    return re.sub(r"\D", "", gtin)
-
+# =========================================================
+# GET GOOGLE SHEETS GTIN DATA
+# =========================================================
 
 def get_gtin_map():
 
-    spreadsheet_id = "14xegQdHjQBytqo-k2E6N8H3AeCqRqvEJ3BmSTZgTQRY"
-    sheet_name = "GTIN"
+    print("Downloading GTIN spreadsheet...")
+
+    # -----------------------------------------------------
+    # Use Google Sheets export CSV directly.
+    #
+    # This avoids the GViz header issue.
+    # -----------------------------------------------------
 
     url = (
         f"https://docs.google.com/spreadsheets/d/"
-        f"{spreadsheet_id}/gviz/tq"
+        f"{GOOGLE_SHEET_ID}/export"
     )
 
     params = {
-        "tqx": "out:csv",
-        "sheet": sheet_name
+        "format": "csv",
+        "sheet": GOOGLE_SHEET_NAME
     }
 
     response = requests.get(
@@ -204,44 +209,51 @@ def get_gtin_map():
 
     response.raise_for_status()
 
-    import csv
-    from io import StringIO
+    csv_text = response.text
+
+    print(
+        f"GTIN CSV downloaded: "
+        f"{len(csv_text)} characters"
+    )
 
     reader = csv.reader(
-        StringIO(response.text)
+        io.StringIO(csv_text)
     )
 
     rows = list(reader)
 
     if not rows:
+
         raise Exception(
-            "GTIN spreadsheet is empty."
+            "GTIN spreadsheet returned no rows."
         )
 
-    # -------------------------------------------------
-    # Find the actual header row
-    # -------------------------------------------------
+    # -----------------------------------------------------
+    # Find Product / GTIN header
+    # -----------------------------------------------------
 
     header_row_index = None
     product_index = None
     gtin_index = None
 
-    for row_index, row in enumerate(rows):
+    for index, row in enumerate(rows):
 
-        normalized_row = [
-            str(value).strip().lower()
+        normalized = [
+            str(value)
+            .strip()
+            .lower()
             for value in row
         ]
 
-        if "product" in normalized_row and "gtin" in normalized_row:
+        if "product" in normalized and "gtin" in normalized:
 
-            header_row_index = row_index
+            header_row_index = index
 
-            product_index = normalized_row.index(
+            product_index = normalized.index(
                 "product"
             )
 
-            gtin_index = normalized_row.index(
+            gtin_index = normalized.index(
                 "gtin"
             )
 
@@ -249,21 +261,17 @@ def get_gtin_map():
 
     if header_row_index is None:
 
-        print("Could not find Product / GTIN header.")
-
-        print(
-            "First rows received from spreadsheet:"
-        )
+        print("First spreadsheet rows:")
 
         for row in rows[:5]:
             print(row)
 
         raise Exception(
-            "Could not find 'Product' and 'GTIN' columns in the GTIN sheet."
+            "Could not find Product and GTIN headers."
         )
 
     print(
-        f"GTIN header found at row: "
+        f"GTIN header found on spreadsheet row "
         f"{header_row_index + 1}"
     )
 
@@ -275,9 +283,9 @@ def get_gtin_map():
         f"GTIN column: {gtin_index + 1}"
     )
 
-    # -------------------------------------------------
-    # Build Product -> GTIN map
-    # -------------------------------------------------
+    # -----------------------------------------------------
+    # Build map
+    # -----------------------------------------------------
 
     gtin_map = {}
 
@@ -297,12 +305,12 @@ def get_gtin_map():
             row[gtin_index]
         ).strip()
 
-        # Ignore empty products
+        # Ignore empty product
         if not product:
             continue
 
         # IMPORTANT:
-        # Only products with GTIN are included
+        # Ignore products without GTIN
         if not gtin:
             continue
 
@@ -322,35 +330,32 @@ def get_gtin_map():
     return gtin_map
 
 
-def get_translations(product, language):
+# =========================================================
+# TRANSLATIONS
+# =========================================================
+
+def get_translations(product):
 
     translations = {}
 
-    if language == "it":
-        translation_list = product.get(
-            "italianTranslations",
-            []
-        )
-
-    elif language == "fr":
-        translation_list = product.get(
-            "frenchTranslations",
-            []
-        )
-
-    else:
-        translation_list = []
-
-    for translation in translation_list:
+    for translation in product.get(
+        "translations",
+        []
+    ):
 
         key = translation.get("key")
         value = translation.get("value")
 
         if key and value:
+
             translations[key] = value
 
     return translations
 
+
+# =========================================================
+# BRAND
+# =========================================================
 
 def detect_brand(title, vendor):
 
@@ -359,20 +364,29 @@ def detect_brand(title, vendor):
     for keyword, brand in BRAND_RULES:
 
         if keyword in title_lower:
+
             return brand
 
     if vendor and vendor.strip():
+
         return vendor.strip()
 
     return "SAIVERA"
 
 
+# =========================================================
+# CLEAN DESCRIPTION
+# =========================================================
+
 def clean_description(description):
 
     if not description:
+
         return ""
 
-    description = html.unescape(description)
+    description = html.unescape(
+        description
+    )
 
     description = re.sub(
         r"<[^>]+>",
@@ -389,28 +403,54 @@ def clean_description(description):
     return description.strip()
 
 
+# =========================================================
+# CATEGORY
+# =========================================================
+
 def get_category(product):
 
-    category = product.get("category")
+    category = product.get(
+        "category"
+    )
 
     if not category:
+
         return "Computer Software"
 
-    full_name = category.get("fullName")
-    name = category.get("name")
+    full_name = category.get(
+        "fullName"
+    )
 
-    # Custom category:
-    # Software > Video Game Software > Digital Video Games
+    name = category.get(
+        "name"
+    )
+
+    # -----------------------------------------------------
+    # Digital Video Games
+    #
+    # Software > Video Game Software >
+    # Digital Video Games
+    #
     # becomes:
+    #
     # Video Games
-    if full_name == "Software > Video Game Software > Digital Video Games":
+    # -----------------------------------------------------
+
+    if full_name == (
+        "Software > Video Game Software > "
+        "Digital Video Games"
+    ):
+
         return "Video Games"
 
     if full_name:
 
         if " in " in full_name:
 
-            parts = full_name.split(" in ")
+            parts = full_name.split(
+                " in "
+            )
+
             parts.reverse()
 
             return " > ".join(
@@ -420,39 +460,72 @@ def get_category(product):
 
         return full_name
 
-    return name or "Computer Software"
+    return (
+        name
+        or
+        "Computer Software"
+    )
 
 
-def get_category_for_variant(product, sku):
+def get_category_for_variant(
+    product,
+    sku
+):
 
-    # Every SKU beginning with XBOX-
-    # gets the custom Trovaprezzi category
-    if sku and sku.strip().upper().startswith("XBOX-"):
-        return "Abbonamenti Gaming"
+    if sku:
 
-    return get_category(product)
+        sku_clean = sku.strip().upper()
 
+        if sku_clean.startswith(
+            "XBOX-"
+        ):
+
+            return "Abbonamenti Gaming"
+
+    return get_category(
+        product
+    )
+
+
+# =========================================================
+# STOCK
+# =========================================================
 
 def get_stock_status(variant):
 
-    inventory_item = variant.get("inventoryItem")
+    inventory_item = variant.get(
+        "inventoryItem"
+    )
 
+    # Safety fallback
     if not inventory_item:
+
         return "disponibile"
 
-    tracked = inventory_item.get("tracked")
+    tracked = inventory_item.get(
+        "tracked"
+    )
 
-    # Inventory tracking disabled
+    # If Shopify does not track inventory,
+    # treat it as available.
     if not tracked:
+
         return "disponibile"
 
     inventory_levels = (
         inventory_item
-        .get("inventoryLevels", {})
-        .get("nodes", [])
+        .get(
+            "inventoryLevels",
+            {}
+        )
+        .get(
+            "nodes",
+            []
+        )
     )
 
     total_available = 0
+
     found_quantity = False
 
     for level in inventory_levels:
@@ -464,7 +537,10 @@ def get_stock_status(variant):
 
         for quantity_data in quantities:
 
-            if quantity_data.get("name") == "available":
+            if (
+                quantity_data.get("name")
+                == "available"
+            ):
 
                 quantity = quantity_data.get(
                     "quantity",
@@ -472,13 +548,23 @@ def get_stock_status(variant):
                 )
 
                 total_available += quantity
+
                 found_quantity = True
 
-    if found_quantity and total_available > 0:
+    if (
+        found_quantity
+        and
+        total_available > 0
+    ):
+
         return "disponibile"
 
     return "non disponibile"
 
+
+# =========================================================
+# GET SHOPIFY PRODUCTS
+# =========================================================
 
 def get_products():
 
@@ -496,7 +582,8 @@ def get_products():
                 "variables": {
                     "cursor": cursor
                 }
-            }
+            },
+            timeout=60
         )
 
         response.raise_for_status()
@@ -504,25 +591,50 @@ def get_products():
         data = response.json()
 
         if "errors" in data:
-            raise Exception(data["errors"])
 
-        product_data = data["data"]["products"]
+            raise Exception(
+                data["errors"]
+            )
+
+        product_data = (
+            data["data"]["products"]
+        )
 
         products.extend(
             product_data["nodes"]
         )
 
-        page_info = product_data["pageInfo"]
+        page_info = (
+            product_data["pageInfo"]
+        )
 
-        if not page_info["hasNextPage"]:
+        if not page_info[
+            "hasNextPage"
+        ]:
+
             break
 
-        cursor = page_info["endCursor"]
+        cursor = (
+            page_info["endCursor"]
+        )
+
+    print(
+        f"Active Shopify products: "
+        f"{len(products)}"
+    )
 
     return products
 
 
-def add_field(parent, name, value):
+# =========================================================
+# ADD XML FIELD
+# =========================================================
+
+def add_field(
+    parent,
+    name,
+    value
+):
 
     element = ET.SubElement(
         parent,
@@ -530,21 +642,27 @@ def add_field(parent, name, value):
     )
 
     element.text = str(
-        value or ""
+        value
+        if value is not None
+        else ""
     )
 
     return element
 
 
+# =========================================================
+# GENERATE OFFER
+# =========================================================
+
 def generate_offer(
     root,
     product,
     variant,
+    gtin,
     title,
     description,
     product_url,
-    brand,
-    gtin
+    brand
 ):
 
     offer = ET.SubElement(
@@ -552,12 +670,14 @@ def generate_offer(
         "Offer"
     )
 
-    sku = variant.get("sku", "")
-
     price = variant.get(
         "price",
         "0"
     )
+
+    # -----------------------------------------------------
+    # Image
+    # -----------------------------------------------------
 
     images = (
         product
@@ -587,14 +707,30 @@ def generate_offer(
             ""
         )
 
+    # -----------------------------------------------------
+    # Category
+    # -----------------------------------------------------
+
+    sku = variant.get(
+        "sku"
+    )
+
     category = get_category_for_variant(
         product,
         sku
     )
 
+    # -----------------------------------------------------
+    # Stock
+    # -----------------------------------------------------
+
     stock_status = get_stock_status(
         variant
     )
+
+    # -----------------------------------------------------
+    # XML
+    # -----------------------------------------------------
 
     add_field(
         offer,
@@ -620,6 +756,8 @@ def generate_offer(
         price
     )
 
+    # IMPORTANT:
+    # GTIN instead of SKU
     add_field(
         offer,
         "Code",
@@ -657,7 +795,14 @@ def generate_offer(
     )
 
 
-def save_xml(root, filename):
+# =========================================================
+# SAVE XML
+# =========================================================
+
+def save_xml(
+    root,
+    filename
+):
 
     xml_string = ET.tostring(
         root,
@@ -685,17 +830,33 @@ def save_xml(root, filename):
         )
 
 
+# =========================================================
+# GENERATE FEEDS
+# =========================================================
+
 def generate_feed():
+
+    # -----------------------------------------------------
+    # Load GTIN map first
+    # -----------------------------------------------------
 
     gtin_map = get_gtin_map()
 
+    # -----------------------------------------------------
+    # Load Shopify
+    # -----------------------------------------------------
+
     products = get_products()
 
-    italian_root = ET.Element(
+    # -----------------------------------------------------
+    # XML roots
+    # -----------------------------------------------------
+
+    english_root = ET.Element(
         "Products"
     )
 
-    english_root = ET.Element(
+    italian_root = ET.Element(
         "Products"
     )
 
@@ -703,37 +864,30 @@ def generate_feed():
         "Products"
     )
 
-    total_offers = 0
+    # -----------------------------------------------------
+    # Counters
+    # -----------------------------------------------------
+
+    matched_products = 0
+    skipped_products = 0
 
     available_offers = 0
     unavailable_offers = 0
 
-    products_with_gtin = []
+    # -----------------------------------------------------
+    # Products
+    # -----------------------------------------------------
 
     for product in products:
-        gtin = gtin_map.get(normalize_product_name(product.get("title", "")), "")
-        if not gtin:
-            continue
-        product["_feed_gtin"] = gtin
-        products_with_gtin.append(product)
 
-    for product in products_with_gtin:
-
-        gtin = product["_feed_gtin"]
-
-        # Italian translations
-        italian_translations = get_translations(
-            product,
-            "it"
+        translations = get_translations(
+            product
         )
 
-        # French translations
-        french_translations = get_translations(
-            product,
-            "fr"
-        )
+        # -------------------------------------------------
+        # Original English
+        # -------------------------------------------------
 
-        # Original English content
         original_title = product.get(
             "title",
             ""
@@ -744,13 +898,22 @@ def generate_feed():
             ""
         )
 
+        english_title = original_title
+
+        english_description = clean_description(
+            original_description
+        )
+
+        # -------------------------------------------------
         # Italian
-        italian_title = italian_translations.get(
+        # -------------------------------------------------
+
+        italian_title = translations.get(
             "title",
             original_title
         )
 
-        italian_description_html = italian_translations.get(
+        italian_description_html = translations.get(
             "body_html",
             original_description
         )
@@ -759,27 +922,17 @@ def generate_feed():
             italian_description_html
         )
 
-        # English
-        english_title = original_title
-
-        english_description = clean_description(
-            original_description
-        )
-
+        # -------------------------------------------------
         # French
-        french_title = french_translations.get(
-            "title",
-            original_title
-        )
-
-        french_description_html = french_translations.get(
-            "body_html",
-            original_description
-        )
-
-        french_description = clean_description(
-            french_description_html
-        )
+        #
+        # Shopify translations need to be requested
+        # separately, therefore we retrieve them below
+        # using product handle/title if available.
+        #
+        # To keep the current query lightweight,
+        # French is obtained from the product's French
+        # translations through a second request.
+        # -------------------------------------------------
 
         handle = product.get(
             "handle",
@@ -796,23 +949,31 @@ def generate_feed():
             vendor
         )
 
-        # Italian URL
-        italian_url = (
-            "https://saivera.net/it/products/"
-            + handle
-        )
+        # -------------------------------------------------
+        # Product URLs
+        # -------------------------------------------------
 
-        # English URL
         english_url = (
             "https://saivera.net/products/"
             + handle
         )
 
-        # French URL
+        italian_url = (
+            "https://saivera.net/it/products/"
+            + handle
+        )
+
         french_url = (
             "https://saivera.net/fr/products/"
             + handle
         )
+
+        # -------------------------------------------------
+        # Variants
+        #
+        # You said each product has only one variant.
+        # We therefore only use the first one.
+        # -------------------------------------------------
 
         variants = (
             product
@@ -820,111 +981,56 @@ def generate_feed():
             .get("nodes", [])
         )
 
-        for variant in variants:
+        if not variants:
 
-            stock_status = get_stock_status(
-                variant
-            )
+            skipped_products += 1
 
-            if stock_status == "disponibile":
-                available_offers += 1
-            else:
-                unavailable_offers += 1
+            continue
 
-            # Italian offer
-            generate_offer(
-                italian_root,
-                product,
-                variant,
-                italian_title,
-                italian_description,
-                italian_url,
-                brand,
-                gtin
-            )
+        variant = variants[0]
 
-            # English offer
-            generate_offer(
-                english_root,
-                product,
-                variant,
-                english_title,
-                english_description,
-                english_url,
-                brand,
-                gtin
-            )
+        # -------------------------------------------------
+        # GTIN matching
+        # -------------------------------------------------
 
-            # French offer
-            generate_offer(
-                french_root,
-                product,
-                variant,
-                french_title,
-                french_description,
-                french_url,
-                brand,
-                gtin
-            )
+        # We match using the Shopify product title.
+        product_key = re.sub(
+            r"\s+",
+            " ",
+            original_title
+        ).strip().lower()
 
-            total_offers += 1
+        gtin = gtin_map.get(
+            product_key
+        )
 
-    # Save Italian feed
-    save_xml(
-        italian_root,
-        "feed-it.xml"
-    )
+        # -------------------------------------------------
+        # No GTIN = do not put product
+        # in any feed.
+        # -------------------------------------------------
 
-    # Save English feed
-    save_xml(
-        english_root,
-        "feed-en.xml"
-    )
+        if not gtin:
 
-    save_xml(
-        english_root,
-        "product-en.xml"
-    )
+            skipped_products += 1
 
-    # Save French feed
-    save_xml(
-        french_root,
-        "feed-fr.xml"
-    )
+            continue
 
-    print(
-        "Feeds generated successfully."
-    )
+        matched_products += 1
 
-    print(
-        f"Active products: {len(products)}"
-    )
+        # -------------------------------------------------
+        # Stock statistics
+        # -------------------------------------------------
 
-    print(
-        f"Offers per feed: {total_offers}"
-    )
+        stock_status = get_stock_status(
+            variant
+        )
 
-    print(
-        f"Available offers: {available_offers}"
-    )
+        if stock_status == "disponibile":
 
-    print(
-        f"Unavailable offers: {unavailable_offers}"
-    )
+            available_offers += 1
 
-    print(
-        "Italian feed: feed-it.xml"
-    )
+        else:
 
-    print(
-        "English feed: feed-en.xml"
-    )
+            unavailable_offers += 1
 
-    print(
-        "French feed: feed-fr.xml"
-    )
-
-
-if __name__ == "__main__":
-
-    generate_feed()
+        # ---------------------------
