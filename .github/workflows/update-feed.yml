@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout GTIN feed repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -32,10 +32,24 @@ jobs:
         run: |
           python generate_feed.py
 
-      - name: Commit updated feeds
+      - name: Checkout main feed repository
+        uses: actions/checkout@v4
+        with:
+          repository: senasli950/trovaprezzy-feed
+          token: ${{ secrets.OLD_REPO_TOKEN }}
+          path: old-feed
+
+      - name: Copy GTIN feeds to main feed repository
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp feed-en.xml old-feed/feed-en.xml
+          cp feed-it.xml old-feed/feed-it.xml
+          cp feed-fr.xml old-feed/feed-fr.xml
+
+      - name: Commit and push GTIN feeds
+        working-directory: old-feed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add feed-en.xml feed-it.xml feed-fr.xml
 
