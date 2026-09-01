@@ -15,7 +15,7 @@ from difflib import SequenceMatcher
 
 SHOPIFY_STORE = "it3u3i-5e.myshopify.com"
 ACCESS_TOKEN = os.environ["SHOPIFY_ACCESS_TOKEN"]
-API_VERSION = "2025-01"
+API_translations(localeVERSION = "2025-01"
 
 URL = (
     f"https://{SHOPIFY_STORE}"
@@ -115,12 +115,12 @@ query GetProducts($cursor: String) {
         fullName
       }
 
-      translations(locale: "it") {
+      italianTranslations: translations(locale: "it") {
         key
         value
       }
 
-      translations(locale: "fr") {
+      frenchTranslations: translations(locale: "fr") {
         key
         value
       }
@@ -723,7 +723,7 @@ def generate_feed():
         # -------------------------------------------------
 
         italian_translations = get_translation_map(
-            product.get("translations", [])
+            product.get("italianTranslations", [])
         )
 
         italian_title = italian_translations.get(
@@ -743,7 +743,7 @@ def generate_feed():
         # -------------------------------------------------
 
         french_translations = get_translation_map(
-            product.get("translationsFr", [])
+            product.get("frenchTranslations", [])
         )
 
         french_title = french_translations.get(
@@ -920,4 +920,5 @@ def generate_feed():
 
 if __name__ == "__main__":
     generate_feed()
+e_feed()
         
