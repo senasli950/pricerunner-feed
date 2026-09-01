@@ -219,7 +219,7 @@ def get_gtin_map():
 
     params = {
     "format": "csv",
-    "gid": "GOOGLE_SHEET_GID",
+    "gid": GOOGLE_SHEET_GID,
 }
 
     response = requests.get(
