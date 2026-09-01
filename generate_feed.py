@@ -880,20 +880,9 @@ def generate_feed():
     # Save
     # -----------------------------------------------------
 
-    save_xml(
-        english_root,
-        "fees-en.xml",
-    )
-
-    save_xml(
-        italian_root,
-        "fees-it.xml",
-    )
-
-    save_xml(
-        french_root,
-        "fees-fr.xml",
-    )
+    save_xml(english_root, "feed-en.xml")
+    save_xml(italian_root, "feed-it.xml")
+    save_xml(french_root, "feed-fr.xml")
 
     # -----------------------------------------------------
     # Statistics
@@ -920,3 +909,4 @@ def generate_feed():
 
 if __name__ == "__main__":
     generate_feed()
+            
