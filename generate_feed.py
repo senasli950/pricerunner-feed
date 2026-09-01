@@ -33,7 +33,7 @@ HEADERS = {
 # =========================================================
 
 GOOGLE_SHEET_ID = "14xegQdHjQBytqo-k2E6N8H3AeCqRqvEJ3BmSTZgTQRY"
-GOOGLE_SHEET_NAME = "GTIN"
+GOOGLE_SHEET_GID = "642575637"
 
 
 # =========================================================
@@ -218,9 +218,9 @@ def get_gtin_map():
     )
 
     params = {
-        "format": "csv",
-        "sheet": GOOGLE_SHEET_NAME,
-    }
+    "format": "csv",
+    "gid": "GOOGLE_SHEET_GID",
+}
 
     response = requests.get(
         url,
@@ -920,3 +920,4 @@ def generate_feed():
 
 if __name__ == "__main__":
     generate_feed()
+        
