@@ -182,26 +182,105 @@ def clean_gtin(gtin):
 
 
 def get_gtin_map():
-    response = requests.get(GOOGLE_SHEET_CSV_URL, timeout=30)
+
+    spreadsheet_id = "14xegQdHjQBytqo-k2E6N8H3AeCqRqvEJ3BmSTZgTQRY"
+    sheet_name = "GTIN"
+
+    url = (
+        f"https://docs.google.com/spreadsheets/d/"
+        f"{spreadsheet_id}/gviz/tq"
+    )
+
+    params = {
+        "tqx": "out:csv",
+        "sheet": sheet_name
+    }
+
+    response = requests.get(
+        url,
+        params=params,
+        timeout=30
+    )
+
     response.raise_for_status()
-    rows = list(csv.reader(io.StringIO(response.content.decode("utf-8-sig"))))
+
+    # Read CSV
+    import csv
+    from io import StringIO
+
+    reader = csv.reader(
+        StringIO(response.text)
+    )
+
+    rows = list(reader)
+
     if not rows:
-        raise Exception("Google Spreadsheet is empty.")
-    headers = [str(x).strip().casefold() for x in rows[0]]
+        raise Exception(
+            "GTIN spreadsheet is empty."
+        )
+
+    # Normalize headers
+    headers = [
+        str(header).strip().lower()
+        for header in rows[0]
+    ]
+
+    print("GTIN spreadsheet headers:", headers)
+
+    # Find Product column
     try:
         product_index = headers.index("product")
+    except ValueError:
+        raise Exception(
+            f"Product column not found. "
+            f"Detected headers: {headers}"
+        )
+
+    # Find GTIN column
+    try:
         gtin_index = headers.index("gtin")
     except ValueError:
-        raise Exception("Spreadsheet first row must contain Product and GTIN headers.")
-    result = {}
+        raise Exception(
+            f"GTIN column not found. "
+            f"Detected headers: {headers}"
+        )
+
+    gtin_map = {}
+
     for row in rows[1:]:
-        if len(row) <= max(product_index, gtin_index):
+
+        if len(row) <= max(
+            product_index,
+            gtin_index
+        ):
             continue
+
         product = row[product_index].strip()
-        gtin = clean_gtin(row[gtin_index])
-        if product and gtin:
-            result[normalize_product_name(product)] = gtin
-    return result
+        gtin = row[gtin_index].strip()
+
+        # Ignore empty Product
+        if not product:
+            continue
+
+        # IMPORTANT:
+        # Only products with GTIN are added
+        if not gtin:
+            continue
+
+        # Normalize product name for matching
+        product_key = re.sub(
+            r"\s+",
+            " ",
+            product
+        ).strip().lower()
+
+        gtin_map[product_key] = gtin
+
+    print(
+        f"GTIN products loaded: {len(gtin_map)}"
+    )
+
+    return gtin_map
 
 
 def get_translations(product, language):
@@ -810,4 +889,4 @@ def generate_feed():
 if __name__ == "__main__":
 
     generate_feed()
-  
+    
