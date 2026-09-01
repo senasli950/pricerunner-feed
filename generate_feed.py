@@ -6,11 +6,11 @@ import io
 import requests
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-from difflib import SequenceMatcher
+
 
 
 # =========================================================
-# SHOPIFY
+#def find_gtin(product_title, gtin_map): SHOPIFY
 # =========================================================
 
 SHOPIFY_STORE = "it3u3i-5e.myshopify.com"
@@ -294,36 +294,14 @@ def get_gtin_map():
 # GTIN MATCHING
 # =========================================================
 
-def find_gtin(product_title, gtin_map):
 
+def find_gtin(product_title, gtin_map):
     key = normalize_product_name(product_title)
 
-    # 1. Exact normalized match.
     gtin = gtin_map.get(key)
 
     if gtin:
         return gtin, "exact"
-
-    # 2. Very conservative fuzzy fallback.
-    # This handles tiny differences in spaces/dashes/characters
-    # without freely matching unrelated products.
-    best_key = None
-    best_score = 0.0
-
-    for sheet_key in gtin_map:
-
-        score = SequenceMatcher(
-            None,
-            key,
-            sheet_key,
-        ).ratio()
-
-        if score > best_score:
-            best_score = score
-            best_key = sheet_key
-
-    if best_key and best_score >= 0.94:
-        return gtin_map[best_key], f"fuzzy {best_score:.3f}"
 
     return None, None
 
@@ -909,4 +887,4 @@ def generate_feed():
 
 if __name__ == "__main__":
     generate_feed()
-            
+        
